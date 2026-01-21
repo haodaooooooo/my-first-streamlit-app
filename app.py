@@ -2,81 +2,91 @@ import streamlit as st
 import random
 import time
 
-# --- 1. 介面風格化 (UI Styling / CSS Injection) ---
-# 科學說明：透過 CSS 選擇器強制改變 DOM 元素的渲染屬性
-# 配色邏輯：
-# 背景：#f9f7f0 (米白/宣紙)
-# 文字：#5c4033 (深褐/墨跡)
-# 按鈕：#8b0000 (朱紅/印泥) -> 邊框與文字
+# --- 1. CSS 樣式注入 (維持商朝風格) ---
 def inject_custom_css():
     st.markdown("""
         <style>
-        /* 全局字體設定：優先使用楷體 */
         html, body, [class*="css"]  {
-            font-family: "KaiTi", "楷体", "STKaiti", "SimSun", serif;
-            color: #5c4033;
-            background-color: #f9f7f0;
+            font-family: "KaiTi", "楷体", serif;
+            color: #4a3b2a;
+            background-color: #f4f0e6;
         }
-        
-        /* 縮小全局字體 */
-        p, .stMarkdown, .stText, .stMetricLabel, .stMetricValue {
-            font-size: 14px !important;
-        }
-        
-        /* 標題樣式：書法感 */
-        h1, h2, h3 {
-            color: #2c1608 !important;
-            font-weight: bold;
-            letter-spacing: 2px;
-        }
-        
-        /* 按鈕樣式：朱紅邊框，中國風 */
         .stButton > button {
             background-color: transparent;
-            color: #8b0000;
-            border: 2px solid #8b0000;
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: "KaiTi", serif;
-            transition: all 0.3s;
+            color: #800000;
+            border: 2px solid #800000;
+            border-radius: 0px; /* 方正風格 */
+            transition: all 0.2s;
         }
         .stButton > button:hover {
-            background-color: #8b0000;
-            color: #f9f7f0;
-            border-color: #5c0000;
+            background-color: #800000;
+            color: #fff;
         }
-        
-        /* 進度條顏色：玉色 */
-        .stProgress > div > div > div > div {
-            background-color: #556b2f;
-        }
-        
-        /* 分隔線 */
-        hr {
-            border-color: #8b0000;
-            opacity: 0.3;
+        /* 側邊欄樣式 */
+        [data-testid="stSidebar"] {
+            background-color: #e8e4d9;
+            border-right: 1px solid #c0b0a0;
         }
         </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 定義實體類別 ---
+# --- 2. 數據結構定義 (Map & Entities) ---
+
+# 世界地圖數據：定義各地點的敵人和 NPC
+WORLD_MAP = {
+    "朝歌 (王都)": {
+        "desc": "大商國都，繁華靡麗，摘星樓高聳入雲。",
+        "enemies": [
+            {"name": "禁衛軍", "hp": 80, "atk": 15, "exp": 30},
+            {"name": "比干怨魂", "hp": 60, "atk": 20, "exp": 25}
+        ],
+        "npcs": [
+            {"name": "多寶道人", "type": "merchant", "items": {"回氣丹": 20, "強身酒": 30}},
+            {"name": "殷商遺老", "type": "civilian", "dialogs": ["大王沈迷妲己，國將不國啊...", "聽說西邊有鳳鳴之聲。"]}
+        ]
+    },
+    "西岐 (周原)": {
+        "desc": "周文王治下之地，民風淳樸，靈氣充沛。",
+        "enemies": [
+            {"name": "巡山靈獸", "hp": 50, "atk": 10, "exp": 20},
+            {"name": "崑崙探子", "hp": 70, "atk": 12, "exp": 25}
+        ],
+        "npcs": [
+            {"name": "姜子牙", "type": "merchant", "items": {"打神鞭碎片": 100, "杏黃旗殘卷": 80}},
+            {"name": "樵夫", "type": "civilian", "dialogs": ["渭水河邊有個怪老頭直鉤釣魚。", "姬昌大人真是仁義之君。"]}
+        ]
+    },
+    "陳塘關 (東海)": {
+        "desc": "濱海雄關，浪濤洶湧，常有龍族出沒。",
+        "enemies": [
+            {"name": "巡海夜叉", "hp": 90, "atk": 18, "exp": 40},
+            {"name": "蝦兵蟹將", "hp": 40, "atk": 8, "exp": 15},
+            {"name": "龍宮三太子", "hp": 150, "atk": 25, "exp": 100}
+        ],
+        "npcs": [
+            {"name": "李靖", "type": "civilian", "dialogs": ["我家那逆子又闖禍了！", "此塔專鎮妖邪。"]},
+            {"name": "東海漁商", "type": "merchant", "items": {"深海珍珠": 50, "龍涎香": 60}}
+        ]
+    }
+}
+
 class QiRefiner:
     def __init__(self, name, hp, max_hp, mp, max_mp, attack):
         self.name = name
-        self.hp = hp            
-        self.max_hp = max_hp
-        self.mp = mp            # 巫力/真氣
-        self.max_mp = max_mp
-        self.attack = attack    
-        self.exp = 0            
-        self.level = 1          # 境界
+        self.hp = hp; self.max_hp = max_hp
+        self.mp = mp; self.max_mp = max_mp
+        self.attack = attack; self.exp = 0; self.level = 1
 
-    def is_alive(self):
-        return self.hp > 0
+    def is_alive(self): return self.hp > 0
+    
+    def heal(self, amount):
+        self.hp = min(self.hp + amount, self.max_hp)
 
+    def restore_mp(self, amount):
+        self.mp = min(self.mp + amount, self.max_mp)
+        
     def take_damage(self, damage):
-        self.hp -= damage
-        if self.hp < 0: self.hp = 0
+        self.hp = max(0, self.hp - damage)
 
     def consume_mp(self, amount):
         if self.mp >= amount:
@@ -86,188 +96,217 @@ class QiRefiner:
 
     def gain_exp(self, amount):
         self.exp += amount
-        threshold = self.level * 100
-        if self.exp >= threshold:
-            self.exp -= threshold
+        if self.exp >= self.level * 100:
+            self.exp -= self.level * 100
             self.level += 1
-            self.max_hp += 25
-            self.max_mp += 15
-            self.attack += 8
-            self.hp = self.max_hp 
-            self.mp = self.max_mp
-            return True 
+            self.max_hp += 20; self.max_mp += 10; self.attack += 5
+            self.hp = self.max_hp; self.mp = self.max_mp
+            return True
         return False
 
 # --- 3. 系統初始化 ---
-st.set_page_config(page_title="殷商煉氣錄", page_icon="🏺")
-inject_custom_css() # 執行 CSS 注入
-
-st.title("🏺 殷商‧煉氣錄")
-st.caption("西元前 1600 年，天命玄鳥，降而生商。")
+st.set_page_config(page_title="殷商‧九州行", page_icon="🗺️", layout="wide")
+inject_custom_css()
 
 if 'player' not in st.session_state:
-    st.session_state.player = QiRefiner("煉氣士", 100, 100, 60, 60, 12)
-    st.session_state.shells = 0  # 貝幣
-    st.session_state.log = ["【卜辭】今日甲子，宜出行，利涉大川。"]
-    st.session_state.enemy = None
-    st.session_state.in_combat = False
+    st.session_state.player = QiRefiner("煉氣士", 120, 120, 80, 80, 15)
+    st.session_state.shells = 50
+    st.session_state.location = "朝歌 (王都)"
+    st.session_state.log = ["【系統】你出生於大商王都朝歌。"]
+    st.session_state.game_state = "IDLE" # IDLE, COMBAT, INTERACT
+    st.session_state.target = None # 儲存當前的敵人或 NPC 物件
 
-def add_log(message):
-    st.session_state.log.insert(0, message)
-    if len(st.session_state.log) > 6: # 縮減日誌行數以配合小介面
-        st.session_state.log.pop()
+def add_log(msg):
+    st.session_state.log.insert(0, msg)
+    if len(st.session_state.log) > 10: st.session_state.log.pop()
 
-# --- 4. 核心邏輯 (商朝版) ---
+# --- 4. 邏輯函數 ---
 
-def explore():
-    event = random.randint(1, 100)
-    
-    if event <= 35: # 獲得貝幣
-        found = random.randint(3, 15)
-        st.session_state.shells += found
-        add_log(f"🐚 於荒野拾得【貝幣】{found} 朋。")
-        # 略微回氣
-        p = st.session_state.player
-        p.mp = min(p.mp + 10, p.max_mp)
-        
-    elif event <= 55: # 無事
-        add_log("🍂 洹水之濱，青銅鼎立，四野寂寥。")
-        
-    else: # 遭遇戰
-        level = st.session_state.player.level
-        scaling = level * 6
-        # 商朝/封神背景怪物
-        enemy_pool = [
-            {"name": "鬼方蠻兵", "hp": 35 + scaling, "atk": 6 + level},
-            {"name": "青銅機關獸", "hp": 70 + scaling, "atk": 12 + level},
-            {"name": "饕餮幼崽", "hp": 110 + scaling, "atk": 18 + level},
-            {"name": "鹿台妖狐", "hp": 90 + scaling, "atk": 22 + level}
-        ]
-        data = random.choice(enemy_pool)
-        st.session_state.enemy = QiRefiner(data["name"], data["hp"], data["hp"], 0, 0, data["atk"])
-        st.session_state.in_combat = True
-        add_log(f"⚠️ 凶煞之氣！遭遇【{st.session_state.enemy.name}】！")
-
-def combat_round(skill_name):
-    player = st.session_state.player
-    enemy = st.session_state.enemy
-    
-    # 玩家回合
-    damage = 0
-    
-    if skill_name == "普攻":
-        damage = random.randint(player.attack, player.attack + 6)
-        add_log(f"🗡️ 手持青銅戈揮擊，造成 {damage} 點傷害。")
-        
-    elif skill_name == "五雷正法":
-        cost = 15
-        if player.consume_mp(cost):
-            damage = random.randint(player.attack * 2, player.attack * 3)
-            add_log(f"⚡ [五雷正法] 引天雷破邪！造成 {damage} 點重傷！")
-        else:
-            add_log("🚫 巫力枯竭，無法溝通天地！")
-            
-    elif skill_name == "番天印":
-        cost = 40
-        if player.consume_mp(cost):
-            damage = random.randint(player.attack * 5, player.attack * 7)
-            add_log(f"🏔️ [番天印] 祭出法寶，泰山壓頂！造成 {damage} 點毀滅傷害！")
-        else:
-             add_log("🚫 巫力不足，法寶祭煉失敗！")
-
-    if damage > 0:
-        enemy.take_damage(damage)
-
-    # 勝利判定
-    if not enemy.is_alive():
-        base_exp = 25 * player.level
-        bonus_shells = random.randint(10, 40)
-        
-        st.session_state.shells += bonus_shells
-        is_levelup = player.gain_exp(base_exp)
-        
-        add_log(f"🏆 斬妖除魔！獲得 {bonus_shells} 貝幣，道行增加 {base_exp}。")
-        if is_levelup:
-            add_log(f"🐲 【天命覺醒】！境界提升至第 {player.level} 重！")
-            st.balloons()
-            
-        st.session_state.enemy = None
-        st.session_state.in_combat = False
+def travel(new_location):
+    if st.session_state.game_state == "COMBAT":
+        add_log("🚫 戰鬥中無法移動！")
         return
+    st.session_state.location = new_location
+    st.session_state.game_state = "IDLE"
+    st.session_state.target = None
+    add_log(f"🐎 跋涉千里，抵達了【{new_location}】。")
 
-    # 敵人回合
-    enemy_dmg = random.randint(enemy.attack - 3, enemy.attack + 4)
-    player.take_damage(enemy_dmg)
-    add_log(f"👹 {enemy.name} 凶猛反撲，你受到 {enemy_dmg} 點傷害。")
+def explore_location():
+    loc_data = WORLD_MAP[st.session_state.location]
+    dice = random.randint(1, 100)
+    
+    if dice <= 40: # 遭遇敵人 (40%)
+        enemy_data = random.choice(loc_data["enemies"])
+        # 根據玩家等級動態調整敵人
+        scaling = st.session_state.player.level * 5
+        st.session_state.target = QiRefiner(enemy_data["name"], enemy_data["hp"]+scaling, enemy_data["hp"]+scaling, 0, 0, enemy_data["atk"] + int(scaling/2))
+        st.session_state.game_state = "COMBAT"
+        add_log(f"⚔️ 殺氣逼人！遭遇【{st.session_state.target.name}】！")
+        
+    elif dice <= 70: # 遭遇 NPC (30%)
+        npc_data = random.choice(loc_data["npcs"])
+        st.session_state.target = npc_data
+        st.session_state.game_state = "INTERACT"
+        add_log(f"🗣️ 前方遇到一位【{npc_data['name']}】。")
+        
+    else: # 撿錢/無事 (30%)
+        found = random.randint(5, 20)
+        st.session_state.shells += found
+        add_log(f"🐚 撿到遺落的貝幣 {found} 朋。")
 
-    if not player.is_alive():
-        add_log("💀 魂歸封神台，你的傳說到此為止。")
-
-def meditation():
-    cost = 40
-    if st.session_state.shells >= cost:
-        st.session_state.shells -= cost
-        p = st.session_state.player
-        p.hp = p.max_hp
-        p.mp = p.max_mp
-        add_log("🧘 燃燒蓍草占卜，休養生息，狀態全滿。")
+# 戰鬥邏輯
+def combat_logic(action):
+    player = st.session_state.player
+    enemy = st.session_state.target
+    
+    dmg = 0
+    if action == "attack":
+        dmg = random.randint(player.attack, player.attack + 5)
+        add_log(f"🗡️ 你攻擊造成 {dmg} 傷害。")
+    elif action == "skill":
+        if player.consume_mp(20):
+            dmg = random.randint(player.attack * 2, player.attack * 3)
+            add_log(f"⚡ 施展雷法造成 {dmg} 傷害！")
+        else:
+            add_log("🚫 巫力不足！")
+            
+    if dmg > 0: enemy.take_damage(dmg)
+    
+    if not enemy.is_alive():
+        base_exp = 30 * player.level
+        bonus = random.randint(10, 50)
+        player.gain_exp(base_exp)
+        st.session_state.shells += bonus
+        add_log(f"🏆 獲勝！得貝幣 {bonus}，修為 {base_exp}。")
+        st.session_state.game_state = "IDLE"
+        st.session_state.target = None
     else:
-        add_log("❌ 貝幣不足 (需 40)，無法獻祭回覆。")
+        # 敵人反擊
+        enemy_dmg = random.randint(enemy.attack-2, enemy.attack+5)
+        player.take_damage(enemy_dmg)
+        add_log(f"👹 敵人反擊造成 {enemy_dmg} 傷害。")
+        if not player.is_alive():
+            add_log("💀 勝敗乃兵家常事...")
+            st.session_state.game_state = "DEAD"
 
-def restart():
-    st.session_state.clear()
-    st.rerun()
+# 交易/對話邏輯
+def interact_logic(action, item_name=None, price=0):
+    npc = st.session_state.target
+    
+    if action == "chat":
+        dialog = random.choice(npc["dialogs"]) if "dialogs" in npc else "......"
+        add_log(f"🗨️ {npc['name']}：「{dialog}」")
+        
+    elif action == "buy":
+        if st.session_state.shells >= price:
+            st.session_state.shells -= price
+            # 簡單實作：購買直接使用
+            if "丹" in item_name or "珠" in item_name:
+                st.session_state.player.heal(50)
+                add_log(f"💊 購買並服用 {item_name}，氣血恢復。")
+            elif "酒" in item_name or "香" in item_name:
+                st.session_state.player.restore_mp(50)
+                add_log(f"🍶 購買並飲用 {item_name}，巫力恢復。")
+            else:
+                st.session_state.player.attack += 2
+                add_log(f"🗡️ 購買 {item_name}，攻擊力永久提升！")
+        else:
+            add_log("❌ 貝幣不足！")
+            
+    elif action == "leave":
+        st.session_state.game_state = "IDLE"
+        st.session_state.target = None
+        add_log("👋 告別了對方。")
 
 # --- 5. 介面渲染 (UI Rendering) ---
 
-# 狀態儀表 (使用小字體)
+# 側邊欄：地圖導航
+with st.sidebar:
+    st.header("🗺️ 九州輿圖")
+    current_loc = st.session_state.location
+    st.info(f"當前位置：{current_loc}")
+    st.write(WORLD_MAP[current_loc]["desc"])
+    st.markdown("---")
+    st.write("前往其他地區：")
+    for loc in WORLD_MAP:
+        if loc != current_loc:
+            if st.button(f"前往 {loc}"):
+                travel(loc)
+                st.rerun()
+
+# 主介面：狀態欄
 p = st.session_state.player
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("境界", f"{p.level} 重天")
-col2.metric("氣血", f"{p.hp}/{p.max_hp}")
-col3.metric("巫力", f"{p.mp}/{p.max_mp}")
-col4.metric("貝幣", st.session_state.shells)
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("境界", f"Lv.{p.level}")
+c2.metric("氣血", f"{p.hp}/{p.max_hp}")
+c3.metric("巫力", f"{p.mp}/{p.max_mp}")
+c4.metric("貝幣", st.session_state.shells)
 
-# 視覺化條
-st.caption("氣血 (HP)")
 st.progress(p.hp / p.max_hp)
-st.caption("巫力 (MP)")
-st.progress(p.mp / p.max_mp)
-
 st.markdown("---")
 
-# 互動區
-if p.is_alive():
-    if st.session_state.in_combat:
-        st.markdown(f"### 👹 遭遇：{st.session_state.enemy.name}")
-        st.text(f"敵方氣血：{st.session_state.enemy.hp}")
-        
-        c1, c2, c3 = st.columns(3)
-        if c1.button("青銅戈 (普攻)"):
-            combat_round("普攻")
+# 主介面：動態內容區
+if st.session_state.game_state == "DEAD":
+    st.error("你已氣絕身亡。")
+    if st.button("🔥 轉世重修"):
+        st.session_state.clear()
+        st.rerun()
+
+elif st.session_state.game_state == "COMBAT":
+    enemy = st.session_state.target
+    st.subheader(f"⚔️ 對決：{enemy.name}")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"敵方氣血：{enemy.hp}")
+        st.progress(min(enemy.hp/100, 1.0)) # 簡化顯示
+    with col2:
+        if st.button("普通攻擊", use_container_width=True):
+            combat_logic("attack")
             st.rerun()
-        if c2.button("五雷正法 (15巫力)"):
-            combat_round("五雷正法")
+        if st.button("五雷正法 (20MP)", use_container_width=True):
+            combat_logic("skill")
             st.rerun()
-        if c3.button("番天印 (40巫力)"):
-            combat_round("番天印")
+
+elif st.session_state.game_state == "INTERACT":
+    npc = st.session_state.target
+    st.subheader(f"👥 互動：{npc['name']}")
+    
+    if npc["type"] == "civilian":
+        if st.button("閒聊", use_container_width=True):
+            interact_logic("chat")
+            st.rerun()
+        if st.button("離開", use_container_width=True):
+            interact_logic("leave")
             st.rerun()
             
-    else:
-        st.markdown("### 🗺️ 大商疆域")
-        c1, c2 = st.columns(2)
-        if c1.button("🌲 探索九州", use_container_width=True):
-            explore()
+    elif npc["type"] == "merchant":
+        st.write("【商舖貨架】")
+        for item, price in npc["items"].items():
+            col_a, col_b = st.columns([3, 1])
+            col_a.write(f"📦 {item} ({price} 貝幣)")
+            if col_b.button("購買", key=item):
+                interact_logic("buy", item, price)
+                st.rerun()
+        if st.button("離開商舖"):
+            interact_logic("leave")
             st.rerun()
-        if c2.button("🧘 祭祀休整 (40貝幣)", use_container_width=True):
-            meditation()
-            st.rerun()
-else:
-    st.error("勝敗乃兵家常事。")
-    if st.button("🔥 浴火重生"):
-        restart()
 
+else: # IDLE state
+    st.subheader(f"📍 {st.session_state.location}")
+    if st.button("🌲 在此地探索", use_container_width=True):
+        explore_location()
+        st.rerun()
+    if st.button("🧘 原地修整 (恢復狀態)", use_container_width=True):
+        if st.session_state.shells >= 10:
+            st.session_state.shells -= 10
+            p.heal(999); p.restore_mp(999)
+            add_log("🧘 花費 10 貝幣修整完畢。")
+        else:
+            add_log("❌ 盤纏不足。")
+        st.rerun()
+
+# 日誌區
 st.markdown("---")
-st.markdown("### 📜 龜甲卜辭 (日誌)")
+st.subheader("📜 行腳記錄")
 for msg in st.session_state.log:
     st.text(msg)
