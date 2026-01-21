@@ -2,6 +2,15 @@ import streamlit as st
 import random
 import uuid
 
+# --- 引入外部數據模組 ---
+# 科學說明：這行指令會讓 Python 去讀取 game_data.py 裡面的變數
+from game_data import ITEMS_DB, GENERALS_DB
+
+# ... (其餘邏輯代碼保持不變) ...
+
+# 測試點：原本用到 ITEMS_DB 的地方都不需要改，
+# 因為 import 進來後，它就存在於這個命名空間 (Namespace) 了。
+
 # --- 1. CSS 樣式：漢末烽火風格 ---
 def inject_custom_css():
     st.markdown("""
@@ -419,3 +428,4 @@ else:
     st.caption("📜 建安紀事")
     for msg in st.session_state.log:
         st.text(msg)
+
