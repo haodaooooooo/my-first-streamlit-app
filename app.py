@@ -2,17 +2,74 @@ import streamlit as st
 import random
 import time
 
-# --- 1. 定義實體類別：俠客與妖魔 ---
-class Cultivator:
+# --- 1. 介面風格化 (UI Styling / CSS Injection) ---
+# 科學說明：透過 CSS 選擇器強制改變 DOM 元素的渲染屬性
+# 配色邏輯：
+# 背景：#f9f7f0 (米白/宣紙)
+# 文字：#5c4033 (深褐/墨跡)
+# 按鈕：#8b0000 (朱紅/印泥) -> 邊框與文字
+def inject_custom_css():
+    st.markdown("""
+        <style>
+        /* 全局字體設定：優先使用楷體 */
+        html, body, [class*="css"]  {
+            font-family: "KaiTi", "楷体", "STKaiti", "SimSun", serif;
+            color: #5c4033;
+            background-color: #f9f7f0;
+        }
+        
+        /* 縮小全局字體 */
+        p, .stMarkdown, .stText, .stMetricLabel, .stMetricValue {
+            font-size: 14px !important;
+        }
+        
+        /* 標題樣式：書法感 */
+        h1, h2, h3 {
+            color: #2c1608 !important;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        
+        /* 按鈕樣式：朱紅邊框，中國風 */
+        .stButton > button {
+            background-color: transparent;
+            color: #8b0000;
+            border: 2px solid #8b0000;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: "KaiTi", serif;
+            transition: all 0.3s;
+        }
+        .stButton > button:hover {
+            background-color: #8b0000;
+            color: #f9f7f0;
+            border-color: #5c0000;
+        }
+        
+        /* 進度條顏色：玉色 */
+        .stProgress > div > div > div > div {
+            background-color: #556b2f;
+        }
+        
+        /* 分隔線 */
+        hr {
+            border-color: #8b0000;
+            opacity: 0.3;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# --- 2. 定義實體類別 ---
+class QiRefiner:
     def __init__(self, name, hp, max_hp, mp, max_mp, attack):
         self.name = name
-        self.hp = hp            # 體力 (Health Point)
+        self.hp = hp            
         self.max_hp = max_hp
-        self.mp = mp            # 靈力 (Mana/Qi)
+        self.mp = mp            # 巫力/真氣
         self.max_mp = max_mp
-        self.attack = attack    # 基礎攻擊力
-        self.exp = 0            # 修為 (Experience)
-        self.level = 1          # 境界 (Level)
+        self.attack = attack    
+        self.exp = 0            
+        self.level = 1          # 境界
 
     def is_alive(self):
         return self.hp > 0
@@ -29,195 +86,188 @@ class Cultivator:
 
     def gain_exp(self, amount):
         self.exp += amount
-        # 科學公式：升級閾值 = 當前等級 * 100
         threshold = self.level * 100
         if self.exp >= threshold:
             self.exp -= threshold
             self.level += 1
-            self.max_hp += 20
-            self.max_mp += 10
-            self.attack += 5
-            self.hp = self.max_hp # 升級回滿狀態
+            self.max_hp += 25
+            self.max_mp += 15
+            self.attack += 8
+            self.hp = self.max_hp 
             self.mp = self.max_mp
-            return True # 回傳升級訊號
+            return True 
         return False
 
-# --- 2. 系統初始化 ---
-st.set_page_config(page_title="軒轅仙俠錄", page_icon="🗡️")
-st.title("🗡️ 軒轅仙俠錄 (Xianxia RPG)")
+# --- 3. 系統初始化 ---
+st.set_page_config(page_title="殷商煉氣錄", page_icon="🏺")
+inject_custom_css() # 執行 CSS 注入
+
+st.title("🏺 殷商‧煉氣錄")
+st.caption("西元前 1600 年，天命玄鳥，降而生商。")
 
 if 'player' not in st.session_state:
-    # 初始屬性：體力100, 靈力50, 攻擊10
-    st.session_state.player = Cultivator("少俠", 100, 100, 50, 50, 10)
-    st.session_state.spirit_stones = 0  # 靈石 (原金幣)
-    st.session_state.log = ["【系統】你踏入了這片上古神州大地..."]
+    st.session_state.player = QiRefiner("煉氣士", 100, 100, 60, 60, 12)
+    st.session_state.shells = 0  # 貝幣
+    st.session_state.log = ["【卜辭】今日甲子，宜出行，利涉大川。"]
     st.session_state.enemy = None
     st.session_state.in_combat = False
 
 def add_log(message):
-    st.session_state.log.insert(0, message) # 新訊息在最上方
-    if len(st.session_state.log) > 8:
+    st.session_state.log.insert(0, message)
+    if len(st.session_state.log) > 6: # 縮減日誌行數以配合小介面
         st.session_state.log.pop()
 
-# --- 3. 核心邏輯 ---
+# --- 4. 核心邏輯 (商朝版) ---
 
 def explore():
-    """遊歷江湖邏輯"""
     event = random.randint(1, 100)
     
-    if event <= 30: # 30% 機遇
-        stones = random.randint(5, 20)
-        st.session_state.spirit_stones += stones
-        add_log(f"💰 偶遇前人遺塚，拾得 {stones} 顆靈石。")
-        # 恢復少量靈力
-        recover = random.randint(5, 10)
+    if event <= 35: # 獲得貝幣
+        found = random.randint(3, 15)
+        st.session_state.shells += found
+        add_log(f"🐚 於荒野拾得【貝幣】{found} 朋。")
+        # 略微回氣
         p = st.session_state.player
-        p.mp = min(p.mp + recover, p.max_mp)
+        p.mp = min(p.mp + 10, p.max_mp)
         
-    elif event <= 50: # 20% 平安無事
-        add_log("🍃 清風拂過，四周靈氣祥和，你運功調息。")
+    elif event <= 55: # 無事
+        add_log("🍂 洹水之濱，青銅鼎立，四野寂寥。")
         
-    else: # 50% 遭遇妖魔
+    else: # 遭遇戰
         level = st.session_state.player.level
-        # 動態難度：怪物強度隨玩家等級提升
-        scaling = level * 5
+        scaling = level * 6
+        # 商朝/封神背景怪物
         enemy_pool = [
-            {"name": "孤魂野鬼", "hp": 30 + scaling, "atk": 5 + level},
-            {"name": "黑风寨主", "hp": 60 + scaling, "atk": 10 + level},
-            {"name": "千年樹妖", "hp": 100 + scaling, "atk": 15 + level}
+            {"name": "鬼方蠻兵", "hp": 35 + scaling, "atk": 6 + level},
+            {"name": "青銅機關獸", "hp": 70 + scaling, "atk": 12 + level},
+            {"name": "饕餮幼崽", "hp": 110 + scaling, "atk": 18 + level},
+            {"name": "鹿台妖狐", "hp": 90 + scaling, "atk": 22 + level}
         ]
         data = random.choice(enemy_pool)
-        # 怪物不需要 MP，簡化處理
-        st.session_state.enemy = Cultivator(data["name"], data["hp"], data["hp"], 0, 0, data["atk"])
+        st.session_state.enemy = QiRefiner(data["name"], data["hp"], data["hp"], 0, 0, data["atk"])
         st.session_state.in_combat = True
-        add_log(f"⚠️ 殺氣逼人！前方出現了【{st.session_state.enemy.name}】！")
+        add_log(f"⚠️ 凶煞之氣！遭遇【{st.session_state.enemy.name}】！")
 
 def combat_round(skill_name):
-    """戰鬥回合邏輯"""
     player = st.session_state.player
     enemy = st.session_state.enemy
     
-    # --- 玩家回合 ---
+    # 玩家回合
     damage = 0
-    cost = 0
     
     if skill_name == "普攻":
-        damage = random.randint(player.attack, player.attack + 5)
-        add_log(f"⚔️ 你使出基礎劍招，造成 {damage} 點傷害。")
+        damage = random.randint(player.attack, player.attack + 6)
+        add_log(f"🗡️ 手持青銅戈揮擊，造成 {damage} 點傷害。")
         
-    elif skill_name == "御劍術":
-        cost = 10
+    elif skill_name == "五雷正法":
+        cost = 15
         if player.consume_mp(cost):
             damage = random.randint(player.attack * 2, player.attack * 3)
-            add_log(f"⚡ [御劍術] 劍氣縱橫！造成 {damage} 點暴擊！")
+            add_log(f"⚡ [五雷正法] 引天雷破邪！造成 {damage} 點重傷！")
         else:
-            add_log("🚫 靈力不足，無法施展御劍術！倉促間只能防禦。")
+            add_log("🚫 巫力枯竭，無法溝通天地！")
             
-    elif skill_name == "軒轅一擊":
-        cost = 30
+    elif skill_name == "番天印":
+        cost = 40
         if player.consume_mp(cost):
-            damage = random.randint(player.attack * 4, player.attack * 6)
-            add_log(f"🔥 [軒轅一擊] 天地變色！造成 {damage} 點毀滅傷害！")
+            damage = random.randint(player.attack * 5, player.attack * 7)
+            add_log(f"🏔️ [番天印] 祭出法寶，泰山壓頂！造成 {damage} 點毀滅傷害！")
         else:
-             add_log("🚫 靈力不足，無法施展奧義！")
+             add_log("🚫 巫力不足，法寶祭煉失敗！")
 
     if damage > 0:
         enemy.take_damage(damage)
 
-    # --- 判定勝利 ---
+    # 勝利判定
     if not enemy.is_alive():
-        base_exp = 20 * player.level
-        bonus_stones = random.randint(10, 50)
+        base_exp = 25 * player.level
+        bonus_shells = random.randint(10, 40)
         
-        st.session_state.spirit_stones += bonus_stones
+        st.session_state.shells += bonus_shells
         is_levelup = player.gain_exp(base_exp)
         
-        add_log(f"🏆 勝負已分！獲得 {bonus_stones} 靈石，修為增加 {base_exp}。")
+        add_log(f"🏆 斬妖除魔！獲得 {bonus_shells} 貝幣，道行增加 {base_exp}。")
         if is_levelup:
-            add_log(f"🌟 【境界突破】！你達到了 {player.level} 級！屬性大幅提升！")
-            st.balloons() # 科學獎勵機制：視覺刺激
+            add_log(f"🐲 【天命覺醒】！境界提升至第 {player.level} 重！")
+            st.balloons()
             
         st.session_state.enemy = None
         st.session_state.in_combat = False
         return
 
-    # --- 怪物回合 ---
-    enemy_dmg = random.randint(enemy.attack - 2, enemy.attack + 5)
+    # 敵人回合
+    enemy_dmg = random.randint(enemy.attack - 3, enemy.attack + 4)
     player.take_damage(enemy_dmg)
-    add_log(f"👹 {enemy.name} 發起反撲，你受到 {enemy_dmg} 點傷害。")
+    add_log(f"👹 {enemy.name} 凶猛反撲，你受到 {enemy_dmg} 點傷害。")
 
     if not player.is_alive():
-        add_log("💀 眼前一黑，你的修仙之路到此為止...")
+        add_log("💀 魂歸封神台，你的傳說到此為止。")
 
 def meditation():
-    """修煉/恢復"""
-    cost = 50
-    if st.session_state.spirit_stones >= cost:
-        st.session_state.spirit_stones -= cost
+    cost = 40
+    if st.session_state.shells >= cost:
+        st.session_state.shells -= cost
         p = st.session_state.player
         p.hp = p.max_hp
         p.mp = p.max_mp
-        add_log("🧘 消耗靈石閉關修煉，狀態全滿！")
+        add_log("🧘 燃燒蓍草占卜，休養生息，狀態全滿。")
     else:
-        add_log("❌ 靈石不足 (需 50)，無法購買丹藥修煉。")
+        add_log("❌ 貝幣不足 (需 40)，無法獻祭回覆。")
 
 def restart():
     st.session_state.clear()
     st.rerun()
 
-# --- 4. 介面渲染 (UI Rendering) ---
+# --- 5. 介面渲染 (UI Rendering) ---
 
-# 狀態欄 (HUD)
+# 狀態儀表 (使用小字體)
 p = st.session_state.player
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("境界 (Level)", f"Lv.{p.level}")
-c2.metric("體力 (HP)", f"{p.hp}/{p.max_hp}")
-c3.metric("靈力 (MP)", f"{p.mp}/{p.max_mp}")
-c4.metric("靈石", st.session_state.spirit_stones)
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("境界", f"{p.level} 重天")
+col2.metric("氣血", f"{p.hp}/{p.max_hp}")
+col3.metric("巫力", f"{p.mp}/{p.max_mp}")
+col4.metric("貝幣", st.session_state.shells)
 
-# 進度條
-st.caption("體力")
+# 視覺化條
+st.caption("氣血 (HP)")
 st.progress(p.hp / p.max_hp)
-st.caption("靈力")
+st.caption("巫力 (MP)")
 st.progress(p.mp / p.max_mp)
-st.caption(f"修為進度 ({p.exp}/{p.level*100})")
-st.progress(min(p.exp / (p.level*100), 1.0))
 
 st.markdown("---")
 
-# 戰鬥/探索區域
+# 互動區
 if p.is_alive():
     if st.session_state.in_combat:
-        st.subheader(f"⚔️ 遭遇強敵：{st.session_state.enemy.name}")
-        st.write(f"敵方體力：{st.session_state.enemy.hp}")
+        st.markdown(f"### 👹 遭遇：{st.session_state.enemy.name}")
+        st.text(f"敵方氣血：{st.session_state.enemy.hp}")
         
-        # 戰鬥選單
-        col_a, col_b, col_c = st.columns(3)
-        if col_a.button("普通攻擊"):
+        c1, c2, c3 = st.columns(3)
+        if c1.button("青銅戈 (普攻)"):
             combat_round("普攻")
             st.rerun()
-        if col_b.button("御劍術 (消耗10靈力)"):
-            combat_round("御劍術")
+        if c2.button("五雷正法 (15巫力)"):
+            combat_round("五雷正法")
             st.rerun()
-        if col_c.button("軒轅一擊 (消耗30靈力)"):
-            combat_round("軒轅一擊")
+        if c3.button("番天印 (40巫力)"):
+            combat_round("番天印")
             st.rerun()
             
     else:
-        st.subheader("🗺️ 神州大地")
+        st.markdown("### 🗺️ 大商疆域")
         c1, c2 = st.columns(2)
-        if c1.button("🌲 遊歷江湖", use_container_width=True):
+        if c1.button("🌲 探索九州", use_container_width=True):
             explore()
             st.rerun()
-        if c2.button("🧘 閉關修煉 (50靈石)", use_container_width=True):
+        if c2.button("🧘 祭祀休整 (40貝幣)", use_container_width=True):
             meditation()
             st.rerun()
 else:
-    st.error("勝敗乃兵家常事，大俠請重新來過。")
-    if st.button("🔄 輪迴轉世"):
+    st.error("勝敗乃兵家常事。")
+    if st.button("🔥 浴火重生"):
         restart()
 
 st.markdown("---")
-st.subheader("📜 江湖傳聞 (日誌)")
+st.markdown("### 📜 龜甲卜辭 (日誌)")
 for msg in st.session_state.log:
     st.text(msg)
