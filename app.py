@@ -1,8 +1,8 @@
 import streamlit as st
 import random
-import time
+import uuid # 用於生成唯一的物品 ID
 
-# --- 1. CSS 樣式注入 (維持商朝風格) ---
+# --- 1. CSS 樣式 (維持殷商風格) ---
 def inject_custom_css():
     st.markdown("""
         <style>
@@ -15,298 +15,368 @@ def inject_custom_css():
             background-color: transparent;
             color: #800000;
             border: 2px solid #800000;
-            border-radius: 0px; /* 方正風格 */
-            transition: all 0.2s;
+            border-radius: 0px; 
         }
         .stButton > button:hover {
             background-color: #800000;
             color: #fff;
         }
-        /* 側邊欄樣式 */
-        [data-testid="stSidebar"] {
+        /* 裝備欄樣式 */
+        .equip-slot {
+            border: 1px dashed #8b0000;
+            padding: 10px;
+            text-align: center;
             background-color: #e8e4d9;
-            border-right: 1px solid #c0b0a0;
+            margin-bottom: 5px;
         }
         </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 數據結構定義 (Map & Entities) ---
+# --- 2. 物品與裝備定義 ---
 
-# 世界地圖數據：定義各地點的敵人和 NPC
+class Equipment:
+    def __init__(self, name, slot, bonus_type, bonus_val, price):
+        self.id = str(uuid.uuid4()) # 科學標記：每個物品都有唯一 ID
+        self.name = name
+        self.slot = slot          # weapon, head, body, feet
+        self.bonus_type = bonus_type # 'atk' or 'hp'
+        self.bonus_val = bonus_val
+        self.price = price
+
+    def desc(self):
+        sign = "攻擊" if self.bonus_type == 'atk' else "氣血"
+        return f"【{self.name}】 ({sign}+{self.bonus_val})"
+
+# 物品資料庫 (藍圖)
+ITEMS_DB = {
+    # 武器
+    "青銅戈": {"slot": "weapon", "type": "atk", "val": 10, "price": 50},
+    "龍泉劍": {"slot": "weapon", "type": "atk", "val": 25, "price": 200},
+    "打神鞭(仿)": {"slot": "weapon", "type": "atk", "val": 50, "price": 800},
+    # 頭部
+    "布巾": {"slot": "head", "type": "hp", "val": 20, "price": 30},
+    "虎頭盔": {"slot": "head", "type": "hp", "val": 50, "price": 150},
+    # 身體
+    "麻衣": {"slot": "body", "type": "hp", "val": 30, "price": 40},
+    "兕皮甲": {"slot": "body", "type": "hp", "val": 80, "price": 300},
+    # 鞋履
+    "草鞋": {"slot": "feet", "type": "hp", "val": 10, "price": 10},
+    "步雲履": {"slot": "feet", "type": "hp", "val": 40, "price": 120},
+}
+
+def create_item(name):
+    """工廠模式：根據名稱生成物品物件"""
+    if name in ITEMS_DB:
+        d = ITEMS_DB[name]
+        return Equipment(name, d['slot'], d['type'], d['val'], d['price'])
+    return None
+
+# --- 3. 世界地圖數據 ---
 WORLD_MAP = {
-    "朝歌 (王都)": {
-        "desc": "大商國都，繁華靡麗，摘星樓高聳入雲。",
-        "enemies": [
-            {"name": "禁衛軍", "hp": 80, "atk": 15, "exp": 30},
-            {"name": "比干怨魂", "hp": 60, "atk": 20, "exp": 25}
-        ],
-        "npcs": [
-            {"name": "多寶道人", "type": "merchant", "items": {"回氣丹": 20, "強身酒": 30}},
-            {"name": "殷商遺老", "type": "civilian", "dialogs": ["大王沈迷妲己，國將不國啊...", "聽說西邊有鳳鳴之聲。"]}
-        ]
+    "朝歌": {
+        "desc": "大商國都，繁華靡麗。",
+        "enemies": ["禁衛軍", "比干怨魂"],
+        "drops": ["布巾", "麻衣", "青銅戈"], # 該地區可能掉落
+        "merchant": ["青銅戈", "布巾", "麻衣", "草鞋"]
     },
-    "西岐 (周原)": {
-        "desc": "周文王治下之地，民風淳樸，靈氣充沛。",
-        "enemies": [
-            {"name": "巡山靈獸", "hp": 50, "atk": 10, "exp": 20},
-            {"name": "崑崙探子", "hp": 70, "atk": 12, "exp": 25}
-        ],
-        "npcs": [
-            {"name": "姜子牙", "type": "merchant", "items": {"打神鞭碎片": 100, "杏黃旗殘卷": 80}},
-            {"name": "樵夫", "type": "civilian", "dialogs": ["渭水河邊有個怪老頭直鉤釣魚。", "姬昌大人真是仁義之君。"]}
-        ]
+    "西岐": {
+        "desc": "周文王治下之地。",
+        "enemies": ["巡山靈獸", "崑崙探子"],
+        "drops": ["虎頭盔", "龍泉劍"],
+        "merchant": ["龍泉劍", "虎頭盔", "兕皮甲"]
     },
-    "陳塘關 (東海)": {
-        "desc": "濱海雄關，浪濤洶湧，常有龍族出沒。",
-        "enemies": [
-            {"name": "巡海夜叉", "hp": 90, "atk": 18, "exp": 40},
-            {"name": "蝦兵蟹將", "hp": 40, "atk": 8, "exp": 15},
-            {"name": "龍宮三太子", "hp": 150, "atk": 25, "exp": 100}
-        ],
-        "npcs": [
-            {"name": "李靖", "type": "civilian", "dialogs": ["我家那逆子又闖禍了！", "此塔專鎮妖邪。"]},
-            {"name": "東海漁商", "type": "merchant", "items": {"深海珍珠": 50, "龍涎香": 60}}
-        ]
+    "陳塘關": {
+        "desc": "濱海雄關，浪濤洶湧。",
+        "enemies": ["巡海夜叉", "龍宮三太子"],
+        "drops": ["步雲履", "打神鞭(仿)"],
+        "merchant": ["步雲履", "龍泉劍", "兕皮甲"]
     }
 }
 
+ENEMY_STATS = {
+    "禁衛軍": {"hp": 80, "atk": 15, "exp": 30},
+    "比干怨魂": {"hp": 60, "atk": 20, "exp": 25},
+    "巡山靈獸": {"hp": 50, "atk": 10, "exp": 20},
+    "崑崙探子": {"hp": 70, "atk": 12, "exp": 25},
+    "巡海夜叉": {"hp": 90, "atk": 18, "exp": 40},
+    "龍宮三太子": {"hp": 150, "atk": 25, "exp": 100}
+}
+
+# --- 4. 角色類別 (含裝備邏輯) ---
 class QiRefiner:
-    def __init__(self, name, hp, max_hp, mp, max_mp, attack):
+    def __init__(self, name):
         self.name = name
-        self.hp = hp; self.max_hp = max_hp
-        self.mp = mp; self.max_mp = max_mp
-        self.attack = attack; self.exp = 0; self.level = 1
-
-    def is_alive(self): return self.hp > 0
-    
-    def heal(self, amount):
-        self.hp = min(self.hp + amount, self.max_hp)
-
-    def restore_mp(self, amount):
-        self.mp = min(self.mp + amount, self.max_mp)
+        self.base_hp = 100
+        self.base_atk = 10
+        self.current_hp = 100
+        self.mp = 100
+        self.max_mp = 100
+        self.exp = 0
+        self.level = 1
         
-    def take_damage(self, damage):
-        self.hp = max(0, self.hp - damage)
+        # 容器
+        self.inventory = [] # 列表
+        self.equipment = {  # 字典：插槽 -> 物件
+            "weapon": None,
+            "head": None,
+            "body": None,
+            "feet": None
+        }
+    
+    # 計算屬性：基礎 + 裝備加成
+    @property
+    def max_hp(self):
+        bonus = 0
+        for slot, item in self.equipment.items():
+            if item and item.bonus_type == 'hp':
+                bonus += item.bonus_val
+        return self.base_hp + bonus
 
-    def consume_mp(self, amount):
-        if self.mp >= amount:
-            self.mp -= amount
-            return True
-        return False
+    @property
+    def attack(self):
+        bonus = 0
+        for slot, item in self.equipment.items():
+            if item and item.bonus_type == 'atk':
+                bonus += item.bonus_val
+        return self.base_atk + bonus
 
-    def gain_exp(self, amount):
-        self.exp += amount
-        if self.exp >= self.level * 100:
-            self.exp -= self.level * 100
-            self.level += 1
-            self.max_hp += 20; self.max_mp += 10; self.attack += 5
-            self.hp = self.max_hp; self.mp = self.max_mp
-            return True
-        return False
+    def equip(self, item_id):
+        # 從背包尋找物品
+        item_to_equip = next((i for i in self.inventory if i.id == item_id), None)
+        if not item_to_equip: return
 
-# --- 3. 系統初始化 ---
-st.set_page_config(page_title="殷商‧九州行", page_icon="🗺️", layout="wide")
+        # 卸下當前位置裝備
+        slot = item_to_equip.slot
+        if self.equipment[slot]:
+            self.inventory.append(self.equipment[slot]) # 舊裝備回背包
+        
+        # 穿上新裝備
+        self.equipment[slot] = item_to_equip
+        self.inventory.remove(item_to_equip)
+        
+        # 修正當前血量 (避免溢出或錯誤)
+        self.current_hp = min(self.current_hp, self.max_hp)
+
+    def unequip(self, slot):
+        if self.equipment[slot]:
+            self.inventory.append(self.equipment[slot])
+            self.equipment[slot] = None
+
+# --- 5. 系統初始化 ---
+st.set_page_config(page_title="殷商‧封神武裝", page_icon="🛡️", layout="wide")
 inject_custom_css()
 
 if 'player' not in st.session_state:
-    st.session_state.player = QiRefiner("煉氣士", 120, 120, 80, 80, 15)
-    st.session_state.shells = 50
-    st.session_state.location = "朝歌 (王都)"
-    st.session_state.log = ["【系統】你出生於大商王都朝歌。"]
-    st.session_state.game_state = "IDLE" # IDLE, COMBAT, INTERACT
-    st.session_state.target = None # 儲存當前的敵人或 NPC 物件
+    st.session_state.player = QiRefiner("煉氣士")
+    st.session_state.shells = 100
+    st.session_state.location = "朝歌"
+    st.session_state.log = ["【系統】你下山歷練，身無長物。"]
+    st.session_state.game_state = "IDLE" 
+    st.session_state.target = None
 
 def add_log(msg):
     st.session_state.log.insert(0, msg)
-    if len(st.session_state.log) > 10: st.session_state.log.pop()
+    if len(st.session_state.log) > 8: st.session_state.log.pop()
 
-# --- 4. 邏輯函數 ---
+# --- 6. 核心邏輯 ---
 
-def travel(new_location):
-    if st.session_state.game_state == "COMBAT":
-        add_log("🚫 戰鬥中無法移動！")
-        return
-    st.session_state.location = new_location
-    st.session_state.game_state = "IDLE"
-    st.session_state.target = None
-    add_log(f"🐎 跋涉千里，抵達了【{new_location}】。")
-
-def explore_location():
-    loc_data = WORLD_MAP[st.session_state.location]
+def explore():
+    loc = WORLD_MAP[st.session_state.location]
     dice = random.randint(1, 100)
     
-    if dice <= 40: # 遭遇敵人 (40%)
-        enemy_data = random.choice(loc_data["enemies"])
-        # 根據玩家等級動態調整敵人
-        scaling = st.session_state.player.level * 5
-        st.session_state.target = QiRefiner(enemy_data["name"], enemy_data["hp"]+scaling, enemy_data["hp"]+scaling, 0, 0, enemy_data["atk"] + int(scaling/2))
+    if dice <= 50: # 戰鬥
+        e_name = random.choice(loc["enemies"])
+        stats = ENEMY_STATS[e_name]
+        # 創建臨時敵人物件
+        st.session_state.target = {
+            "name": e_name, 
+            "hp": stats["hp"] + (st.session_state.player.level * 10), 
+            "max_hp": stats["hp"] + (st.session_state.player.level * 10),
+            "atk": stats["atk"] + st.session_state.player.level,
+            "exp": stats["exp"]
+        }
         st.session_state.game_state = "COMBAT"
-        add_log(f"⚔️ 殺氣逼人！遭遇【{st.session_state.target.name}】！")
-        
-    elif dice <= 70: # 遭遇 NPC (30%)
-        npc_data = random.choice(loc_data["npcs"])
-        st.session_state.target = npc_data
-        st.session_state.game_state = "INTERACT"
-        add_log(f"🗣️ 前方遇到一位【{npc_data['name']}】。")
-        
-    else: # 撿錢/無事 (30%)
-        found = random.randint(5, 20)
+        add_log(f"⚔️ 遭遇敵襲：{e_name}！")
+    
+    elif dice <= 80: # 商人
+        st.session_state.game_state = "MERCHANT"
+        add_log("💰 遇見了行腳商隊。")
+    
+    else:
+        found = random.randint(10, 30)
         st.session_state.shells += found
-        add_log(f"🐚 撿到遺落的貝幣 {found} 朋。")
+        add_log(f"🐚 撿到貝幣 {found}。")
 
-# 戰鬥邏輯
-def combat_logic(action):
-    player = st.session_state.player
-    enemy = st.session_state.target
+def combat_round():
+    p = st.session_state.player
+    e = st.session_state.target
     
-    dmg = 0
-    if action == "attack":
-        dmg = random.randint(player.attack, player.attack + 5)
-        add_log(f"🗡️ 你攻擊造成 {dmg} 傷害。")
-    elif action == "skill":
-        if player.consume_mp(20):
-            dmg = random.randint(player.attack * 2, player.attack * 3)
-            add_log(f"⚡ 施展雷法造成 {dmg} 傷害！")
-        else:
-            add_log("🚫 巫力不足！")
+    # 玩家攻擊
+    dmg = random.randint(int(p.attack * 0.8), int(p.attack * 1.2))
+    e["hp"] -= dmg
+    add_log(f"🗡️ 你造成 {dmg} 點傷害。")
+    
+    if e["hp"] <= 0:
+        # 勝利結算
+        p.exp += e["exp"]
+        coin = random.randint(10, 40)
+        st.session_state.shells += coin
+        add_log(f"🏆 勝利！獲 {coin} 貝幣, {e['exp']} 修為。")
+        
+        # 掉寶機制 (20% 機率)
+        if random.random() < 0.2:
+            drop_name = random.choice(WORLD_MAP[st.session_state.location]["drops"])
+            item = create_item(drop_name)
+            p.inventory.append(item)
+            add_log(f"🎁 敵人掉落了裝備：{item.name}！")
+
+        # 升級判定
+        if p.exp >= p.level * 100:
+            p.exp -= p.level * 100
+            p.level += 1
+            p.base_hp += 20
+            p.base_atk += 5
+            p.current_hp = p.max_hp
+            add_log(f"🌟 境界提升至 Lv.{p.level}！")
+            st.balloons()
             
-    if dmg > 0: enemy.take_damage(dmg)
-    
-    if not enemy.is_alive():
-        base_exp = 30 * player.level
-        bonus = random.randint(10, 50)
-        player.gain_exp(base_exp)
-        st.session_state.shells += bonus
-        add_log(f"🏆 獲勝！得貝幣 {bonus}，修為 {base_exp}。")
         st.session_state.game_state = "IDLE"
-        st.session_state.target = None
     else:
         # 敵人反擊
-        enemy_dmg = random.randint(enemy.attack-2, enemy.attack+5)
-        player.take_damage(enemy_dmg)
-        add_log(f"👹 敵人反擊造成 {enemy_dmg} 傷害。")
-        if not player.is_alive():
-            add_log("💀 勝敗乃兵家常事...")
+        e_dmg = max(1, e["atk"] - random.randint(0, 2)) # 簡易防禦運算
+        p.current_hp -= e_dmg
+        add_log(f"👹 敵人反擊造成 {e_dmg} 傷害。")
+        if p.current_hp <= 0:
+            p.current_hp = 0
             st.session_state.game_state = "DEAD"
+            add_log("💀 你已氣絕。")
 
-# 交易/對話邏輯
-def interact_logic(action, item_name=None, price=0):
-    npc = st.session_state.target
-    
-    if action == "chat":
-        dialog = random.choice(npc["dialogs"]) if "dialogs" in npc else "......"
-        add_log(f"🗨️ {npc['name']}：「{dialog}」")
-        
-    elif action == "buy":
-        if st.session_state.shells >= price:
-            st.session_state.shells -= price
-            # 簡單實作：購買直接使用
-            if "丹" in item_name or "珠" in item_name:
-                st.session_state.player.heal(50)
-                add_log(f"💊 購買並服用 {item_name}，氣血恢復。")
-            elif "酒" in item_name or "香" in item_name:
-                st.session_state.player.restore_mp(50)
-                add_log(f"🍶 購買並飲用 {item_name}，巫力恢復。")
-            else:
-                st.session_state.player.attack += 2
-                add_log(f"🗡️ 購買 {item_name}，攻擊力永久提升！")
-        else:
-            add_log("❌ 貝幣不足！")
-            
-    elif action == "leave":
-        st.session_state.game_state = "IDLE"
-        st.session_state.target = None
-        add_log("👋 告別了對方。")
+def buy_item(item_name):
+    item_proto = ITEMS_DB[item_name]
+    if st.session_state.shells >= item_proto["price"]:
+        st.session_state.shells -= item_proto["price"]
+        new_item = create_item(item_name)
+        st.session_state.player.inventory.append(new_item)
+        add_log(f"🛒 購買了 {item_name}。")
+    else:
+        add_log("❌ 貝幣不足。")
 
-# --- 5. 介面渲染 (UI Rendering) ---
+def sell_item(item_id):
+    p = st.session_state.player
+    item = next((i for i in p.inventory if i.id == item_id), None)
+    if item:
+        sell_price = int(item.price * 0.5) # 半價出售
+        st.session_state.shells += sell_price
+        p.inventory.remove(item)
+        add_log(f"⚖️ 出售 {item.name}，獲得 {sell_price} 貝幣。")
 
-# 側邊欄：地圖導航
+# --- 7. 介面渲染 ---
+
+# 左側：角色裝備與狀態
 with st.sidebar:
-    st.header("🗺️ 九州輿圖")
-    current_loc = st.session_state.location
-    st.info(f"當前位置：{current_loc}")
-    st.write(WORLD_MAP[current_loc]["desc"])
+    st.header("👤 煉氣士")
+    p = st.session_state.player
+    st.write(f"境界: Lv.{p.level}")
+    st.write(f"氣血: {p.current_hp} / {p.max_hp}")
+    st.write(f"攻擊: {p.attack}")
+    st.write(f"貝幣: {st.session_state.shells}")
+    st.progress(p.current_hp / p.max_hp)
+    
     st.markdown("---")
-    st.write("前往其他地區：")
-    for loc in WORLD_MAP:
-        if loc != current_loc:
-            if st.button(f"前往 {loc}"):
-                travel(loc)
+    st.subheader("🛡️ 當前裝備")
+    
+    # 裝備欄顯示
+    slots = {"weapon": "⚔️ 武器", "head": "🧢 頭部", "body": "👕 身體", "feet": "👢 鞋履"}
+    for slot_key, slot_name in slots.items():
+        item = p.equipment[slot_key]
+        st.markdown(f"**{slot_name}**")
+        if item:
+            st.info(f"{item.name} (+{item.bonus_val})")
+            if st.button("卸下", key=f"unequip_{slot_key}"):
+                p.unequip(slot_key)
                 st.rerun()
+        else:
+            st.caption("空")
+            
+    st.markdown("---")
+    st.subheader("🎒 背包")
+    if not p.inventory:
+        st.caption("空空如也")
+    else:
+        for item in p.inventory:
+            col1, col2 = st.columns([3, 2])
+            col1.write(f"{item.name}")
+            if st.session_state.game_state == "MERCHANT":
+                if col2.button("賣出", key=f"sell_{item.id}"):
+                    sell_item(item.id)
+                    st.rerun()
+            else:
+                if col2.button("裝備", key=f"equip_{item.id}"):
+                    p.equip(item.id)
+                    st.rerun()
 
-# 主介面：狀態欄
-p = st.session_state.player
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("境界", f"Lv.{p.level}")
-c2.metric("氣血", f"{p.hp}/{p.max_hp}")
-c3.metric("巫力", f"{p.mp}/{p.max_mp}")
-c4.metric("貝幣", st.session_state.shells)
+# 主視窗
+st.title("殷商‧封神武裝")
 
-st.progress(p.hp / p.max_hp)
+# 地點導航
+if st.session_state.game_state == "IDLE":
+    col_nav = st.columns(len(WORLD_MAP))
+    for idx, (loc_name, loc_data) in enumerate(WORLD_MAP.items()):
+        if col_nav[idx].button(loc_name, disabled=(loc_name == st.session_state.location)):
+            st.session_state.location = loc_name
+            add_log(f"🐎 前往 {loc_name}...")
+            st.rerun()
+    st.info(WORLD_MAP[st.session_state.location]["desc"])
+
 st.markdown("---")
 
-# 主介面：動態內容區
+# 遊戲狀態區
 if st.session_state.game_state == "DEAD":
-    st.error("你已氣絕身亡。")
-    if st.button("🔥 轉世重修"):
+    st.error("勝敗乃兵家常事。")
+    if st.button("🔥 重入輪迴"):
         st.session_state.clear()
         st.rerun()
 
 elif st.session_state.game_state == "COMBAT":
     enemy = st.session_state.target
-    st.subheader(f"⚔️ 對決：{enemy.name}")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"敵方氣血：{enemy.hp}")
-        st.progress(min(enemy.hp/100, 1.0)) # 簡化顯示
-    with col2:
-        if st.button("普通攻擊", use_container_width=True):
-            combat_logic("attack")
-            st.rerun()
-        if st.button("五雷正法 (20MP)", use_container_width=True):
-            combat_logic("skill")
-            st.rerun()
-
-elif st.session_state.game_state == "INTERACT":
-    npc = st.session_state.target
-    st.subheader(f"👥 互動：{npc['name']}")
+    st.subheader(f"⚔️ 正在與 {enemy['name']} 戰鬥")
+    st.write(f"HP: {enemy['hp']} / {enemy['max_hp']}")
+    st.progress(max(0, enemy['hp'] / enemy['max_hp']))
     
-    if npc["type"] == "civilian":
-        if st.button("閒聊", use_container_width=True):
-            interact_logic("chat")
-            st.rerun()
-        if st.button("離開", use_container_width=True):
-            interact_logic("leave")
+    if st.button("👊 進攻", use_container_width=True):
+        combat_round()
+        st.rerun()
+
+elif st.session_state.game_state == "MERCHANT":
+    st.subheader("💰 行腳商隊")
+    st.write("商人：『瞧一瞧看一看，都是上好的法器！』(點擊背包物品可出售)")
+    
+    goods = WORLD_MAP[st.session_state.location]["merchant"]
+    
+    for item_name in goods:
+        data = ITEMS_DB[item_name]
+        c1, c2, c3 = st.columns([2, 1, 1])
+        c1.write(f"**{item_name}** ({data['type']}+{data['val']})")
+        c2.write(f"{data['price']} 貝幣")
+        if c3.button("購買", key=f"buy_{item_name}"):
+            buy_item(item_name)
             st.rerun()
             
-    elif npc["type"] == "merchant":
-        st.write("【商舖貨架】")
-        for item, price in npc["items"].items():
-            col_a, col_b = st.columns([3, 1])
-            col_a.write(f"📦 {item} ({price} 貝幣)")
-            if col_b.button("購買", key=item):
-                interact_logic("buy", item, price)
-                st.rerun()
-        if st.button("離開商舖"):
-            interact_logic("leave")
-            st.rerun()
+    if st.button("👋 離開商店"):
+        st.session_state.game_state = "IDLE"
+        st.rerun()
 
-else: # IDLE state
+else: # IDLE
     st.subheader(f"📍 {st.session_state.location}")
-    if st.button("🌲 在此地探索", use_container_width=True):
-        explore_location()
+    if st.button("🌲 探索四周", use_container_width=True):
+        explore()
         st.rerun()
-    if st.button("🧘 原地修整 (恢復狀態)", use_container_width=True):
-        if st.session_state.shells >= 10:
-            st.session_state.shells -= 10
-            p.heal(999); p.restore_mp(999)
-            add_log("🧘 花費 10 貝幣修整完畢。")
-        else:
-            add_log("❌ 盤纏不足。")
+    if st.button("🧘 休息 (恢復 HP)", use_container_width=True):
+        p.current_hp = p.max_hp
+        add_log("🧘 狀態全滿。")
         st.rerun()
 
-# 日誌區
 st.markdown("---")
-st.subheader("📜 行腳記錄")
-for msg in st.session_state.log:
-    st.text(msg)
+st.caption("📜 紀錄")
+for l in st.session_state.log:
+    st.text(l)
